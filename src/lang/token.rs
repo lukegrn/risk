@@ -14,12 +14,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_tokenize_single_token() {
+    fn tokenize_single_token() {
         assert_eq!(tokenize("token"), ["token"]);
     }
 
     #[test]
-    fn test_tokenize_list_of_tokens() {
+    fn tokenize_list_of_tokens() {
         assert_eq!(
             tokenize("(1 2 3)) 1 token"),
             ["(", "1", "2", "3", ")", ")", "1", "token"]
@@ -27,7 +27,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tokenize_strips_excess_whitespace() {
+    fn tokenize_strips_excess_whitespace() {
         assert_eq!(
             tokenize("( 1 2    3) ) () ) 1 token"),
             ["(", "1", "2", "3", ")", ")", "(", ")", ")", "1", "token"]
@@ -35,7 +35,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tokenize_handles_newline_and_tabs() {
+    fn tokenize_handles_newline_and_tabs() {
         assert_eq!(
             tokenize(
                 "( 1 2 3

@@ -1,6 +1,6 @@
 use std::fmt;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum AstNode {
     Leaf(String),
     AST(Vec<AstNode>),
