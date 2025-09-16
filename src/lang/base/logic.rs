@@ -48,13 +48,20 @@ pub fn eqhuhdef(args: Vec<AstNode>, scope: &Scope) -> Option<Result> {
     }
 }
 
-/*
-* TODO: reimplement in pure risk once `not` and `define` are implemented
-*/
-pub fn neqhuhdef(args: Vec<AstNode>, scope: &Scope) -> Option<Result> {
-    match eqhuhdef(args, &scope) {
-        Some(eq) => match eq {
-            Result::B(res) => Some(Result::B(!res)),
+pub fn notdef(args: Vec<AstNode>, scope: &Scope) -> Option<Result> {
+    if args.len() != 1 {
+        panic!(
+            "Incorrect number of arguments to function <not>, expected 1, received {}",
+            args.len()
+        )
+    }
+
+    let tonot = Program::new(vec![args[0].clone()], &scope).exec();
+
+    match tonot {
+        Some(result) => match result {
+            Result::B(b) => Some(Result::B(!b)),
+            // Anything but explicit #f nots to #f
             _ => Some(Result::B(false)),
         },
         None => None,
@@ -231,6 +238,30 @@ mod tests {
                     &Scope::base()
                 )
                 .unwrap(),
+                Result::B(false)
+            );
+        }
+    }
+
+    mod notdef {
+        use super::super::*;
+
+        #[test]
+        fn notdef_true_for_false() {
+            assert_eq!(
+                notdef(vec![AstNode::Leaf("#f".to_string())], &Scope::base()).unwrap(),
+                Result::B(true)
+            )
+        }
+
+        #[test]
+        fn notdef_false_for_everything_but_explicit_false() {
+            assert_eq!(
+                notdef(vec![AstNode::Leaf("#t".to_string())], &Scope::base()).unwrap(),
+                Result::B(false)
+            );
+            assert_eq!(
+                notdef(vec![AstNode::Leaf("123".to_string())], &Scope::base()).unwrap(),
                 Result::B(false)
             );
         }

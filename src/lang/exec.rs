@@ -120,10 +120,9 @@ impl Scope {
             Scopable::Callback(base::logic::eqhuhdef),
         );
 
-        base_scope.map.insert(
-            String::from("neq?"),
-            Scopable::Callback(base::logic::neqhuhdef),
-        );
+        base_scope
+            .map
+            .insert(String::from("not"), Scopable::Callback(base::logic::notdef));
 
         base_scope
     }
