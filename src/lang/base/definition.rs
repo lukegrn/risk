@@ -1,9 +1,23 @@
+use std::collections::HashSet;
+
 use crate::lang::{
     ast::AstNode,
     exec::Program,
     scope::Scope,
     types::{result::Result, userfunc::FnDef},
 };
+
+fn duplicate_params(params: Vec<String>) -> bool {
+    let mut set = HashSet::new();
+
+    for param in params.iter() {
+        if !set.insert(param) {
+            return true;
+        }
+    }
+
+    return false;
+}
 
 /*
 * Used to define functions and variables
@@ -39,6 +53,10 @@ pub fn definitiondef(args: Vec<AstNode>, scope: &mut Scope) -> Option<Result> {
                                 panic!("All function parameters must be simple strings")
                             }
                         });
+
+                        if duplicate_params(str_params.clone().collect()) {
+                            panic!("Function definition cannot have duplicated parameters")
+                        }
 
                         scope.map.insert(
                             n.to_string(),
@@ -155,5 +173,21 @@ mod tests {
             .unwrap(),
             Result::Primitive(Primitive::I(2))
         )
+    }
+
+    #[test]
+    #[should_panic]
+    fn definitiondef_rejects_when_params_are_dup() {
+        definitiondef(
+            vec![
+                AstNode::AST(vec![
+                    AstNode::Leaf("func".to_string()),
+                    AstNode::Leaf("x".to_string()),
+                    AstNode::Leaf("x".to_string()),
+                ]),
+                AstNode::Leaf("1".to_string()),
+            ],
+            &mut Scope::base(),
+        );
     }
 }
