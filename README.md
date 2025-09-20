@@ -14,7 +14,7 @@ learn how to do these things. Hopefully in the future those won't be
 expectations.
 
 While this is just a learning project, I _do_ want this to be a usable and
-convenient languages. Some of the goals are:
+convenient language. Some of the goals are:
 
 - A few rust builtins as possibile
 - Risk native implementations of the majority of the standard library
