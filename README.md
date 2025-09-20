@@ -19,6 +19,7 @@ convenient language. Some of the goals are:
 - A few rust builtins as possibile
 - Risk native implementations of the majority of the standard library
 - Useful and convenient std library
+- Zero external dependencies
 
 ## Install
 
