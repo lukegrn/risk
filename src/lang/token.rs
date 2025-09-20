@@ -1,6 +1,6 @@
 pub fn tokenize(line: &str) -> Vec<String> {
-    line.replace("(", "( ")
-        .replace(")", " )")
+    line.replace("(", " ( ")
+        .replace(")", " ) ")
         .replace("\n", " ")
         .replace("\t", " ")
         .split(" ")
@@ -42,6 +42,14 @@ mod tests {
                 )"
             ),
             ["(", "1", "2", "3", ")"]
+        );
+    }
+
+    #[test]
+    fn tokenize_handles_touching_sexps() {
+        assert_eq!(
+            tokenize("(1 2 3)(1)"),
+            ["(", "1", "2", "3", ")", "(", "1", ")"]
         );
     }
 }

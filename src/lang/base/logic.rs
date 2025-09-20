@@ -1,9 +1,11 @@
 use crate::lang::{
     ast::AstNode,
-    exec::{Program, Result, Scope},
+    exec::Program,
+    scope::Scope,
+    types::{primitive::Primitive, result::Result},
 };
 
-pub fn ifdef(args: Vec<AstNode>, scope: &Scope) -> Option<Result> {
+pub fn ifdef(args: Vec<AstNode>, scope: &mut Scope) -> Option<Result> {
     if args.len() < 2 || args.len() > 3 {
         panic!(
             "Incorrect number of arguments to function <if>, expected 2 or 3, received {}",
@@ -11,21 +13,26 @@ pub fn ifdef(args: Vec<AstNode>, scope: &Scope) -> Option<Result> {
         );
     }
 
-    let gate = Program::new(vec![args[0].clone()], &scope).exec();
+    let gate = Program::new(args[0].clone(), scope).exec();
+    let on_true = |s: &mut Scope| Program::new(args[1].clone(), s).exec();
+    let on_false = |s: &mut Scope| Program::new(args[2].clone(), s).exec();
 
-    // Everything except #f is true
-    if gate != Some(Result::B(false)) {
-        Program::new(vec![args[1].clone()], &scope).exec()
-    } else {
-        if args.len() == 3 {
-            Program::new(vec![args[2].clone()], &scope).exec()
-        } else {
-            None
-        }
+    match gate {
+        Some(s) => match s {
+            Result::Primitive(p) => match p {
+                Primitive::B(b) => {
+                    // Everything expects #f explicitly is true
+                    if !b { on_false(scope) } else { on_true(scope) }
+                }
+                _ => on_true(scope),
+            },
+            _ => on_true(scope),
+        },
+        None => on_true(scope),
     }
 }
 
-pub fn eqhuhdef(args: Vec<AstNode>, scope: &Scope) -> Option<Result> {
+pub fn eqhuhdef(args: Vec<AstNode>, scope: &mut Scope) -> Option<Result> {
     if args.len() != 2 {
         panic!(
             "Incorrect number of arguments to function <eq?>, expected 2, received {}",
@@ -33,22 +40,22 @@ pub fn eqhuhdef(args: Vec<AstNode>, scope: &Scope) -> Option<Result> {
         )
     }
 
-    let cmp = Program::new(vec![args[0].clone()], &scope).exec();
-    let to = Program::new(vec![args[1].clone()], &scope).exec();
+    let cmp = Program::new(args[0].clone(), scope).exec();
+    let to = Program::new(args[1].clone(), scope).exec();
 
     match cmp {
-        Some(cmpresult) => match to {
-            Some(toresult) => Some(Result::B(cmpresult == toresult)),
-            None => Some(Result::B(false)),
+        Some(from) => match to {
+            Some(res) => Some(Result::Primitive(Primitive::B(from == res))),
+            None => Some(Result::Primitive(Primitive::B(false))),
         },
         None => match to {
-            Some(_) => Some(Result::B(false)),
-            None => Some(Result::B(true)),
+            Some(_) => Some(Result::Primitive(Primitive::B(false))),
+            None => Some(Result::Primitive(Primitive::B(true))),
         },
     }
 }
 
-pub fn notdef(args: Vec<AstNode>, scope: &Scope) -> Option<Result> {
+pub fn notdef(args: Vec<AstNode>, scope: &mut Scope) -> Option<Result> {
     if args.len() != 1 {
         panic!(
             "Incorrect number of arguments to function <not>, expected 1, received {}",
@@ -56,15 +63,24 @@ pub fn notdef(args: Vec<AstNode>, scope: &Scope) -> Option<Result> {
         )
     }
 
-    let tonot = Program::new(vec![args[0].clone()], &scope).exec();
+    let tonot = Program::new(args[0].clone(), scope).exec();
 
     match tonot {
-        Some(result) => match result {
-            Result::B(b) => Some(Result::B(!b)),
-            // Anything but explicit #f nots to #f
-            _ => Some(Result::B(false)),
+        Some(s) => match s {
+            Result::Primitive(p) => match p {
+                Primitive::B(b) => {
+                    if b {
+                        Some(Result::Primitive(Primitive::B(false)))
+                    } else {
+                        Some(Result::Primitive(Primitive::B(true)))
+                    }
+                }
+                // anything but explicit #f nots to #f
+                _ => Some(Result::Primitive(Primitive::B(false))),
+            },
+            _ => Some(Result::Primitive(Primitive::B(false))),
         },
-        None => None,
+        None => Some(Result::Primitive(Primitive::B(false))),
     }
 }
 
@@ -81,10 +97,10 @@ mod tests {
                         AstNode::Leaf("#t".to_string()),
                         AstNode::Leaf("1".to_string()),
                     ],
-                    &Scope::base()
+                    &mut Scope::base()
                 )
                 .unwrap(),
-                Result::I(1)
+                Result::Primitive(Primitive::I(1))
             )
         }
 
@@ -97,10 +113,10 @@ mod tests {
                         AstNode::Leaf("1".to_string()),
                         AstNode::Leaf("2".to_string())
                     ],
-                    &Scope::base()
+                    &mut Scope::base()
                 )
                 .unwrap(),
-                Result::I(1)
+                Result::Primitive(Primitive::I(1))
             )
         }
 
@@ -113,10 +129,10 @@ mod tests {
                         AstNode::Leaf("1".to_string()),
                         AstNode::Leaf("2".to_string())
                     ],
-                    &Scope::base()
+                    &mut Scope::base()
                 )
                 .unwrap(),
-                Result::I(2)
+                Result::Primitive(Primitive::I(2))
             )
         }
 
@@ -129,10 +145,10 @@ mod tests {
                         AstNode::Leaf("1".to_string()),
                         AstNode::Leaf("2".to_string())
                     ],
-                    &Scope::base()
+                    &mut Scope::base()
                 )
                 .unwrap(),
-                Result::I(1)
+                Result::Primitive(Primitive::I(1))
             );
         }
     }
@@ -148,10 +164,10 @@ mod tests {
                         AstNode::Leaf("#t".to_string()),
                         AstNode::Leaf("#t".to_string())
                     ],
-                    &Scope::base()
+                    &mut Scope::base()
                 )
                 .unwrap(),
-                Result::B(true)
+                Result::Primitive(Primitive::B(true))
             );
 
             assert_eq!(
@@ -160,10 +176,10 @@ mod tests {
                         AstNode::Leaf("#f".to_string()),
                         AstNode::Leaf("#f".to_string())
                     ],
-                    &Scope::base()
+                    &mut Scope::base()
                 )
                 .unwrap(),
-                Result::B(true)
+                Result::Primitive(Primitive::B(true))
             );
         }
 
@@ -175,10 +191,10 @@ mod tests {
                         AstNode::Leaf("#f".to_string()),
                         AstNode::Leaf("#t".to_string())
                     ],
-                    &Scope::base()
+                    &mut Scope::base()
                 )
                 .unwrap(),
-                Result::B(false)
+                Result::Primitive(Primitive::B(false))
             );
         }
 
@@ -190,10 +206,10 @@ mod tests {
                         AstNode::Leaf("100".to_string()),
                         AstNode::Leaf("100".to_string())
                     ],
-                    &Scope::base()
+                    &mut Scope::base()
                 )
                 .unwrap(),
-                Result::B(true)
+                Result::Primitive(Primitive::B(true))
             );
         }
 
@@ -205,10 +221,10 @@ mod tests {
                         AstNode::Leaf("100".to_string()),
                         AstNode::Leaf("200".to_string())
                     ],
-                    &Scope::base()
+                    &mut Scope::base()
                 )
                 .unwrap(),
-                Result::B(false)
+                Result::Primitive(Primitive::B(false))
             );
         }
 
@@ -220,10 +236,10 @@ mod tests {
                         AstNode::Leaf("100.1".to_string()),
                         AstNode::Leaf("100.1".to_string())
                     ],
-                    &Scope::base()
+                    &mut Scope::base()
                 )
                 .unwrap(),
-                Result::B(true)
+                Result::Primitive(Primitive::B(true))
             );
         }
 
@@ -235,10 +251,10 @@ mod tests {
                         AstNode::Leaf("100.1".to_string()),
                         AstNode::Leaf("200.2".to_string())
                     ],
-                    &Scope::base()
+                    &mut Scope::base()
                 )
                 .unwrap(),
-                Result::B(false)
+                Result::Primitive(Primitive::B(false))
             );
         }
     }
@@ -249,20 +265,20 @@ mod tests {
         #[test]
         fn notdef_true_for_false() {
             assert_eq!(
-                notdef(vec![AstNode::Leaf("#f".to_string())], &Scope::base()).unwrap(),
-                Result::B(true)
+                notdef(vec![AstNode::Leaf("#f".to_string())], &mut Scope::base()).unwrap(),
+                Result::Primitive(Primitive::B(true))
             )
         }
 
         #[test]
         fn notdef_false_for_everything_but_explicit_false() {
             assert_eq!(
-                notdef(vec![AstNode::Leaf("#t".to_string())], &Scope::base()).unwrap(),
-                Result::B(false)
+                notdef(vec![AstNode::Leaf("#t".to_string())], &mut Scope::base()).unwrap(),
+                Result::Primitive(Primitive::B(false))
             );
             assert_eq!(
-                notdef(vec![AstNode::Leaf("123".to_string())], &Scope::base()).unwrap(),
-                Result::B(false)
+                notdef(vec![AstNode::Leaf("123".to_string())], &mut Scope::base()).unwrap(),
+                Result::Primitive(Primitive::B(false))
             );
         }
     }

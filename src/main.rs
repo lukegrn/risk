@@ -1,9 +1,17 @@
-use crate::lang::{ast, exec, token};
+use crate::lang::{
+    ast,
+    exec::{self},
+    scope::Scope,
+    token,
+    types::result::Result,
+};
 use std::io;
 
 pub mod lang;
 
 fn main() {
+    let mut persistent_state = Scope::base();
+
     loop {
         println!("Enter lisp: ");
         let mut to_exec = String::new();
@@ -11,14 +19,23 @@ fn main() {
             .read_line(&mut to_exec)
             .expect("Failed to read line");
 
-        let res: Option<exec::Result>;
+        let res: Option<Result>;
 
         if let Some(cleaned) = to_exec.strip_suffix("\n") {
-            res = exec::exec(ast::new(token::tokenize(cleaned)));
+            res = exec::exec(
+                ast::new(token::tokenize(cleaned)),
+                Some(&mut persistent_state),
+            );
         } else {
-            res = exec::exec(ast::new(token::tokenize(&to_exec)));
+            res = exec::exec(
+                ast::new(token::tokenize(&to_exec)),
+                Some(&mut persistent_state),
+            );
         }
 
-        println!("{}", res.unwrap());
+        match res {
+            Some(r) => println!("{}", r),
+            None => println!(""),
+        }
     }
 }

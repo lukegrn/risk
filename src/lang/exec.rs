@@ -1,93 +1,51 @@
-use crate::lang::base;
-use std::{collections::HashMap, fmt::Display};
+use crate::lang::types::result::Result;
+use crate::lang::{scope::Scope, types::primitive::Primitive};
 
 use crate::lang::ast::AstNode;
 
-#[derive(PartialEq, Debug, Clone)]
-pub enum Result {
-    S(String),
-    I(i32),
-    F(f64),
-    B(bool),
-}
-
-impl Display for Result {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Result::S(s) => write!(f, "{}", s),
-            Result::I(i) => write!(f, "{}", i),
-            Result::F(fl) => write!(f, "{}", fl),
-            Result::B(b) => match b {
-                true => write!(f, "#t"),
-                false => write!(f, "#f"),
-            },
-        }
-    }
-}
-
-enum Scopable {
-    Result(Result),
-    Callback(fn(args: Vec<AstNode>, scope: &Scope) -> Option<Result>),
-}
-
 pub struct Program<'a> {
-    scope: &'a Scope,
-    ast: Vec<AstNode>,
-}
-
-pub struct Scope {
-    map: HashMap<String, Scopable>,
+    scope: &'a mut Scope,
+    ast: AstNode,
 }
 
 impl Program<'_> {
-    pub fn exec(&self) -> Option<Result> {
-        match &self.ast.clone()[..] {
-            [] => None,
-            [a] => match a {
-                AstNode::Leaf(l) => match l.parse::<i32>() {
-                    Ok(i) => Some(Result::I(i)),
-                    Err(_) => match l.parse::<f64>() {
-                        Ok(f) => Some(Result::F(f)),
-                        Err(_) => match self.scope.map.get(l) {
-                            Some(v) => match v {
-                                Scopable::Result(r) => Some(r.to_owned()),
-                                Scopable::Callback(c) => c(vec![], &self.scope),
-                            },
-                            None => panic!("Reference to undefined variable {}", l),
+    pub fn exec(&mut self) -> Option<Result> {
+        match &self.ast.clone() {
+            // Reference
+            // Try int -> float -> scope lookup (bools are defined in scope)
+            AstNode::Leaf(l) => match l.parse::<i32>() {
+                Ok(i) => Some(Result::Primitive(Primitive::I(i))),
+                Err(_) => match l.parse::<f64>() {
+                    Ok(f) => Some(Result::Primitive(Primitive::F(f))),
+                    Err(_) => match self.scope.map.get(l) {
+                        Some(s) => match s {
+                            Result::Primitive(r) => Some(Result::Primitive(r.clone())),
+                            Result::Builtin(f) => Some(Result::Builtin(f.clone())),
+                            Result::FnDef(fn_def) => Some(Result::FnDef(fn_def.clone())),
                         },
+                        None => panic!("undefined scope for {}", l),
                     },
                 },
-                AstNode::AST(ast_nodes) => Program::new(ast_nodes.to_vec(), &self.scope).exec(),
             },
-            [f, rest @ ..] => match f {
-                AstNode::Leaf(f) => match self.scope.map.get(f) {
-                    Some(s) => match s {
-                        Scopable::Result(r) => panic!("Call to primitive {} as function", r),
-                        Scopable::Callback(c) => c(rest.to_vec(), self.scope),
-                    },
-                    None => panic!("Call to undefined function <{}>", f),
-                },
-                AstNode::AST(ast_nodes) => {
-                    match Program::new(ast_nodes.to_vec(), self.scope).exec() {
-                        Some(r) => match r {
-                            Result::S(s) => match self.scope.map.get(&s) {
-                                Some(v) => match v {
-                                    Scopable::Result(r) => Some(r.to_owned()),
-                                    Scopable::Callback(c) => c(vec![], &self.scope),
-                                },
-                                None => panic!("Reference to undefined variable {}", s),
-                            },
 
-                            p => panic!("Call to primitive {} as function", p),
-                        },
-                        None => panic!("Call to '()"),
-                    }
-                }
+            // Function call
+            AstNode::AST(ast_nodes) => match &ast_nodes[..] {
+                [] => None,
+                [a, rest @ ..] => match Program::new(a.clone(), self.scope).exec() {
+                    Some(result) => match result {
+                        Result::Primitive(p) => {
+                            panic!("Call to value {} as a function", Result::Primitive(p))
+                        }
+                        Result::Builtin(f) => (f.f)(rest.to_vec(), self.scope),
+                        Result::FnDef(fn_def) => fn_def.exec(rest.to_vec(), self.scope),
+                    },
+                    None => None,
+                },
             },
         }
     }
 
-    pub fn new(ast: Vec<AstNode>, scope: &Scope) -> Program<'_> {
+    pub fn new(ast: AstNode, scope: &mut Scope) -> Program<'_> {
         Program {
             scope: scope,
             ast: ast,
@@ -95,41 +53,18 @@ impl Program<'_> {
     }
 }
 
-impl Scope {
-    pub fn base() -> Scope {
-        let mut base_scope: Scope = Scope {
-            map: HashMap::new(),
-        };
-
-        // bools
-        base_scope
-            .map
-            .insert(String::from("#t"), Scopable::Result(Result::B(true)));
-
-        base_scope
-            .map
-            .insert(String::from("#f"), Scopable::Result(Result::B(false)));
-
-        // logic functions
-        base_scope
-            .map
-            .insert(String::from("if"), Scopable::Callback(base::logic::ifdef));
-
-        base_scope.map.insert(
-            String::from("eq?"),
-            Scopable::Callback(base::logic::eqhuhdef),
-        );
-
-        base_scope
-            .map
-            .insert(String::from("not"), Scopable::Callback(base::logic::notdef));
-
-        base_scope
+pub fn exec(exprs: Vec<AstNode>, scope: Option<&mut Scope>) -> Option<Result> {
+    match scope {
+        Some(s) => exprs
+            .iter()
+            .fold(None, |_, exp| Program::new(exp.clone(), s).exec()),
+        None => {
+            let mut s = Scope::base();
+            exprs
+                .iter()
+                .fold(None, |_, exp| Program::new(exp.clone(), &mut s).exec())
+        }
     }
-}
-
-pub fn exec(ast: Vec<AstNode>) -> Option<Result> {
-    Program::new(ast, &Scope::base()).exec()
 }
 
 #[cfg(test)]
@@ -139,31 +74,56 @@ mod tests {
     #[test]
     fn execs_basic_sexp() {
         assert_eq!(
-            exec(vec![
-                AstNode::Leaf("if".to_string()),
-                AstNode::Leaf("#t".to_string()),
-                AstNode::Leaf("1".to_string())
-            ])
+            exec(
+                vec![AstNode::AST(vec![
+                    AstNode::Leaf("if".to_string()),
+                    AstNode::Leaf("#t".to_string()),
+                    AstNode::Leaf("1".to_string())
+                ])],
+                None
+            )
             .unwrap(),
-            Result::I(1)
+            Result::Primitive(Primitive::I(1))
         )
     }
 
     #[test]
     fn execs_nested_sexp() {
         assert_eq!(
-            exec(vec![
-                AstNode::Leaf("if".to_string()),
-                AstNode::AST(vec![
+            exec(
+                vec![AstNode::AST(vec![
                     AstNode::Leaf("if".to_string()),
+                    AstNode::AST(vec![
+                        AstNode::Leaf("if".to_string()),
+                        AstNode::Leaf("1".to_string()),
+                        AstNode::Leaf("#f".to_string())
+                    ]),
                     AstNode::Leaf("1".to_string()),
-                    AstNode::Leaf("#f".to_string())
-                ]),
-                AstNode::Leaf("1".to_string()),
-                AstNode::Leaf("2".to_string())
-            ])
+                    AstNode::Leaf("2".to_string())
+                ])],
+                None
+            )
             .unwrap(),
-            Result::I(2)
+            Result::Primitive(Primitive::I(2))
+        )
+    }
+
+    #[test]
+    fn execs_multiple_sexp_and_returns_last() {
+        assert_eq!(
+            exec(
+                vec![
+                    AstNode::AST(vec![
+                        AstNode::Leaf("define".to_string()),
+                        AstNode::Leaf("x".to_string()),
+                        AstNode::Leaf("1".to_string()),
+                    ]),
+                    AstNode::Leaf("x".to_string())
+                ],
+                None
+            )
+            .unwrap(),
+            Result::Primitive(Primitive::I(1))
         )
     }
 }
