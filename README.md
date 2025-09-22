@@ -16,7 +16,7 @@ expectations.
 While this is just a learning project, I _do_ want this to be a usable and
 convenient language. Some of the goals are:
 
-- A few rust builtins as possibile
+- As few rust builtins as possibile
 - Risk native implementations of the majority of the standard library
 - Useful and convenient std library
 - Zero external dependencies
